@@ -39,7 +39,7 @@ public class userTaskComplete implements TaskListener {
             Map<String,Object> variables=new HashMap<String,Object>(){{
                 put("Oid",oid);
             }};//暂时没有放进去变量感觉并不需要
-            runtimeService.startProcessInstanceById(cachedData.getProcessId(processDefinitionKey),variables);
+            runtimeService.startProcessInstanceById(cachedData.getProcessId(processDefinitionKey,oid),variables);
         }
     }
 }

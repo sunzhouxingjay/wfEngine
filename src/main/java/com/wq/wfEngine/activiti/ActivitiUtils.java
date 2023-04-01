@@ -1,7 +1,7 @@
 package com.wq.wfEngine.activiti;
 
-import com.wq.wfEngine.netutils.Connect;
 import com.wq.wfEngine.pojo.flowNode;
+import com.wq.wfEngine.tool.Connect;
 import com.alibaba.fastjson.JSON;
 import com.wq.wfEngine.cache.cachedData;
 import com.wq.wfEngine.entity.WfTask;

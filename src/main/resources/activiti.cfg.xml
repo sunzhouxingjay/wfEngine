@@ -5,7 +5,7 @@
     <!-- 流程引擎配置 -->
     <bean id="processEngineConfiguration" class="org.activiti.engine.impl.cfg.StandaloneInMemProcessEngineConfiguration">
         <property name="jdbcUrl"
-                  value="jdbc:mysql://127.0.0.1:3306/activiti?useUnicode=true&amp;characterEncoding=utf-8&amp;useSSL=false&amp;serverTimezone=GMT&amp;allowPublicKeyRetrieval=true">
+                  value="jdbc:mysql://127.0.0.1:3306/activiti?useUnicode=true&amp;characterEncoding=utf-8&amp;useSSL=false&amp;serverTimezone=GMT&amp;allowPublicKeyRetrieval=true&amp;autoReconnect=true">
         </property>
         <property name="jdbcDriver" value="com.mysql.cj.jdbc.Driver" />
         <property name="jdbcUsername" value="root"></property>

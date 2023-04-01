@@ -7,8 +7,9 @@ import com.wq.wfEngine.entity.WfTask;
 import com.wq.wfEngine.activiti.ActivitiUtils;
 import com.wq.wfEngine.activiti.RsaEncrypt;
 import com.wq.wfEngine.activiti.workflowFunction;
-import com.wq.wfEngine.cache.jsonTransfer;
+import com.wq.wfEngine.cache.cachedData;
 import com.wq.wfEngine.pojo.flowNode;
+import com.wq.wfEngine.tool.jsonTransfer;
 
 import org.activiti.bpmn.model.*;
 import org.activiti.bpmn.model.Process;
@@ -17,15 +18,18 @@ import org.activiti.engine.ProcessEngine;
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
+import org.activiti.engine.impl.db.redis.entityFieldMap;
 import org.activiti.engine.repository.Deployment;
 import org.activiti.engine.repository.ProcessDefinition;
 import org.activiti.engine.runtime.Execution;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,8 +44,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,34 +72,91 @@ public class WorkFlowController {
     Map<String,String> deployment_NametoId=new HashMap<>();//fileName到deploymentId的映射
     Map<String,String> deployment_IdtoMainProcessId=new HashMap<>();//deploymentId到BPMN mainProcessId的映射
     String redisInitStatus=ActivitiUtils.InitRedis();
-    @Autowired
-    StringRedisTemplate stringRedisTemplate;
+
 
     // private int count=0;
     // httpclient连接池
 
+    @CrossOrigin
+    @RequestMapping(value = "/downloadBpmn", method = {RequestMethod.GET,RequestMethod.POST})
+    @ResponseBody
+    public String downloadBpmn() throws IOException {
+        List<Deployment> deployments=workflowFunction.getAllDeployments();
+        Map<String,Object> deploymentMap=new HashMap<>();
+        for (Deployment deployment:deployments) {
+            deploymentMap.put(deployment.getName(),workflowFunction.getBytesByDeployment(deployment));
+        }
+        return jsonTransfer.mapToJsonString(deploymentMap);
+    }
+
+    @CrossOrigin
     @RequestMapping(value = "/hello", method = {RequestMethod.GET,RequestMethod.POST})
     @ResponseBody
     public String hello() {
         return "hello";
     }
 
-    @RequestMapping(value="/getTaskIds",method = {RequestMethod.POST,RequestMethod.GET})
+    @CrossOrigin
+    @RequestMapping(value = "/testErrorBoundaryEventMap", method = {RequestMethod.GET,RequestMethod.POST})
     @ResponseBody
-    public String getTaskIds() throws IOException {
-        Set<String> taskIds= stringRedisTemplate.keys("t-"+"*");
-        File taskidCsv=new File("/home/sunweekstar/sunzhouxing/taskid.csv");
-        if (!taskidCsv.exists()) {
-            taskidCsv.createNewFile();
-        }
-        Writer writer=new FileWriter(taskidCsv, true);
-        for (String taskid:taskIds) {
-            writer.write(taskid.split("-")[1]+"\n");
-        }
-        writer.close();
+    public String testErrorBoundaryEvent() {
+        return cachedData.testErrorBoundaryEvent();
+    }
+
+    //删除bpmn
+    @CrossOrigin
+    @RequestMapping(value = "/deleteDeployment",method = {RequestMethod.GET,RequestMethod.POST})
+    @ResponseBody
+    public String deleteDeployment(@RequestBody String req) {
+        Map<String,Object> requestMap=jsonTransfer.jsonToMap(req);
+        String deploymentName=String.valueOf(requestMap.get("deploymentName"));
+        workflowFunction.deleteDeploymentByName(deploymentName);
+
         return "ok";
     }
 
+    //智慧城市，过滤了userTask
+    @CrossOrigin
+    @RequestMapping(value="/queryDeployment")
+    @ResponseBody String queryDeployment() {
+        List<Deployment> deployments=workflowFunction.getAllDeployments();
+        // Iterator<Deployment> deploymentIterator= deployments.iterator();
+        // List<String> filteredDeploymentName=new ArrayList<>();
+        // while (deploymentIterator.hasNext()) {
+        //     filteredDeploymentName.add(deploymentIterator.next().getName());
+        // }
+        List<String> filteredDeploymentName=workflowFunction.filterNoDBAPI(deployments);
+        return JSON.toJSONString(workflowFunction.getServiceTaskInfo(filteredDeploymentName));
+    }
+
+    //智慧城市
+    @CrossOrigin
+    @RequestMapping(value="/queryDeploymentByName")
+    @ResponseBody String queryDeploymentByName(@RequestBody String req) throws IOException {
+        Map<String,Object> requestMap=jsonTransfer.jsonToMap(req);
+        String deploymentName=String.valueOf(requestMap.get("deploymentName"));
+        Map<String,Object> deploymentInfo=cachedData.getServiceTaskInfo(deploymentName);
+        String deploymentContent=workflowFunction.getBytesByDeploymentName(deploymentName);
+        String svgContent=workflowFunction.getSvgContent(deploymentName);
+        deploymentInfo.put("content",deploymentContent);
+        deploymentInfo.put("svgContent",svgContent);
+        return JSON.toJSONString(deploymentInfo);
+    }
+
+    //智慧城市
+    @CrossOrigin
+    @RequestMapping(value="/queryStatusByDeploymentName/{deploymentName}")
+    @ResponseBody String queryStatusByDeploymentName(@PathVariable String deploymentName) throws IOException {
+        return JSON.toJSONString(cachedData.getWorkflowStatusByDeploymentName(deploymentName));
+    }
+
+    //智慧城市
+    @CrossOrigin
+    @RequestMapping(value="/queryStatusByOid/{oid}")
+    @ResponseBody String queryStatusByOid(@PathVariable String oid) throws IOException {
+        return JSON.toJSONString(cachedData.getWorkflowStatusByOid(oid));
+    }
+    
 
     // 测试
     @RequestMapping(value = "/test", method = {RequestMethod.POST,RequestMethod.GET})
@@ -108,9 +171,21 @@ public class WorkFlowController {
         //     stringRedisTemplate.opsForValue().get("key");
         // }
         
-        return "ok";
+        return entityFieldMap.look();
     }
 
+    @CrossOrigin
+    @RequestMapping(value="/queryInputByOid/{oid}")
+    @ResponseBody String queryInputByOid(@PathVariable String oid) {
+        return JSON.toJSONString(cachedData.getInputByOid(oid));
+    }
+
+
+    @ExceptionHandler(value = RuntimeException.class) 
+    public ResponseEntity<String> defaultErrorHandler(HttpServletRequest req, Exception e) throws Exception {
+        //Map<String,Object> map=new HashMap<>();
+        return new ResponseEntity<String>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+    }
 
 
     @CrossOrigin
@@ -118,11 +193,14 @@ public class WorkFlowController {
     @ResponseBody
     public String wfDeploy(@RequestBody String req) {
         Map<String,Object> requestMap=jsonTransfer.jsonToMap(req);
-        String fileName=String.valueOf(requestMap.get("fileName"));
+        String deploymentName=String.valueOf(requestMap.get("deploymentName"));
+        if (!deploymentName.substring(deploymentName.length()-5, deploymentName.length()).equals(".bpmn")) {
+            throw new RuntimeException("deployment must end with .bpmn");
+        }
         String fileContent=String.valueOf(requestMap.get("fileContent"));
         //System.out.println("fileName:"+fileName);
         //System.out.println("fileContent:"+fileContent);
-        return workflowFunction.deploy(fileName, fileContent);
+        return workflowFunction.deploy(deploymentName, fileContent);
     }
 
     @CrossOrigin
@@ -130,11 +208,20 @@ public class WorkFlowController {
     @ResponseBody
     public String wfInstance(@RequestBody String req,@PathVariable String Oid) {
         Map<String,Object> requestMap=jsonTransfer.jsonToMap(req);
-        String fileName=String.valueOf(requestMap.get("fileName"));
+        String deploymentName=String.valueOf(requestMap.get("deploymentName"));
         String businessData=String.valueOf(requestMap.get("businessData"));
+        String serviceTaskResultJson=null;
+        if (requestMap.containsKey("serviceTaskResultJson")) {
+            serviceTaskResultJson=String.valueOf(requestMap.get("serviceTaskResultJson"));
+        }
+        if (requestMap.containsKey("staticAllocationTable")) {
+            //静态分配
+            String staticAllocationTable=String.valueOf(requestMap.get("staticAllocationTable"));
+            return workflowFunction.instance(deploymentName, Oid, businessData,staticAllocationTable,serviceTaskResultJson);   
+        }
         //System.out.println(fileName);
         //System.out.println(Oid);
-        return workflowFunction.instance(fileName, Oid,businessData);
+        return workflowFunction.instance(deploymentName, Oid,businessData,null,serviceTaskResultJson);
     }
 
     @CrossOrigin
@@ -145,7 +232,17 @@ public class WorkFlowController {
         String taskName=String.valueOf(requestMap.get("taskName"));
         String processData=String.valueOf(requestMap.get("processData"));
         String businessData=String.valueOf(requestMap.get("businessData"));
-        return workflowFunction.complete(Oid, taskName, processData, businessData);
+
+        if (!requestMap.containsKey("user")) {
+            throw new RuntimeException("user must not be null");
+        }
+        String user=String.valueOf(requestMap.get("user"));
+        String serviceTaskResultJson=null;
+        if (requestMap.containsKey("serviceTaskResultJson")) {
+            serviceTaskResultJson=String.valueOf(requestMap.get("serviceTaskResultJson"));
+        }
+
+        return workflowFunction.complete(Oid, taskName, processData, businessData,user,serviceTaskResultJson);
     }
 
 
